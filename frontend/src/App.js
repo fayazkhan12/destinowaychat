@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "./lib/auth";
 import Navbar from "./components/Navbar";
@@ -14,11 +14,9 @@ import BookingConfirm from "./pages/BookingConfirm";
 import TripShare from "./pages/TripShare";
 import "./App.css";
 
-function AppRouter() {
-  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-  if (typeof window !== "undefined" && window.location.hash?.includes("session_id=")) {
-    return <AuthCallback />;
-  }
+function Shell() {
+  const location = useLocation();
+  const isAgentHome = location.pathname === "/";
   return (
     <>
       <Navbar />
@@ -32,9 +30,17 @@ function AppRouter() {
         <Route path="/login" element={<Login />} />
         <Route path="/trip/:shareId" element={<TripShare />} />
       </Routes>
-      <AIConcierge />
+      {!isAgentHome && <AIConcierge />}
     </>
   );
+}
+
+function AppRouter() {
+  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+  if (typeof window !== "undefined" && window.location.hash?.includes("session_id=")) {
+    return <AuthCallback />;
+  }
+  return <Shell />;
 }
 
 export default function App() {

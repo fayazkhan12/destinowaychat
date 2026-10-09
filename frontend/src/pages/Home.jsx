@@ -1,122 +1,320 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Globe2, Headphones, ShieldCheck, Sparkles } from "lucide-react";
-import SearchBar from "../components/SearchBar";
-import { http } from "../lib/api";
+import { Mic, Send, Sparkles, Plane, Hotel, BusFront, Car, Volume2, VolumeX, ArrowRight } from "lucide-react";
+import { API, http } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
-const HERO_IMAGE = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1800&q=80";
+// --- voice helpers ---
+function pickBestVoice(script) {
+  const voices = window.speechSynthesis?.getVoices() || [];
+  if (!voices.length) return null;
+  const want = script === "hi" ? ["hi-IN"] : ["en-IN", "en-GB", "en-US"];
+  // prefer Google / Microsoft Neural voices
+  for (const lang of want) {
+    const neural = voices.find(v => v.lang === lang && /google|neural|natural|online/i.test(v.name));
+    if (neural) return neural;
+    const any = voices.find(v => v.lang === lang);
+    if (any) return any;
+  }
+  return voices[0];
+}
 
-export default function Home() {
-  const [featured, setFeatured] = useState({ destinations: [], collections: [] });
-  const navigate = useNavigate();
+function speak(text, { onEnd } = {}) {
+  if (!("speechSynthesis" in window) || !text) { onEnd?.(); return; }
+  window.speechSynthesis.cancel();
+  const hasDev = /[\u0900-\u097F]/.test(text);
+  const script = hasDev ? "hi" : "en";
+  const u = new SpeechSynthesisUtterance(text);
+  const v = pickBestVoice(script);
+  if (v) u.voice = v;
+  u.lang = v?.lang || (hasDev ? "hi-IN" : "en-IN");
+  u.rate = 0.98;
+  u.pitch = 1.02;
+  u.volume = 1;
+  u.onend = () => onEnd?.();
+  u.onerror = () => onEnd?.();
+  window.speechSynthesis.speak(u);
+}
 
-  useEffect(() => {
-    http.get("/featured/destinations").then(({ data }) => setFeatured(data)).catch(() => {});
-  }, []);
+// Parse <search>{...}</search> block out of the streamed reply
+function extractSearchIntent(text) {
+  const match = text.match(/<search>\s*([\s\S]*?)\s*<\/search>/i);
+  if (!match) return { clean: text, intent: null };
+  try {
+    const intent = JSON.parse(match[1]);
+    const clean = text.replace(match[0], "").trim();
+    return { clean, intent };
+  } catch {
+    return { clean: text.replace(match[0], "").trim(), intent: null };
+  }
+}
 
-  const openDest = (city) => {
-    const q = new URLSearchParams({ service: "hotels", origin: city, destination: city, travellers: 2 }).toString();
-    navigate(`/search?${q}`);
-  };
+const QUICK_STARTERS = [
+  { label: "Jaipur hotel chahiye", icon: Hotel },
+  { label: "Delhi to Goa flight", icon: Plane },
+  { label: "Mumbai to Pune bus", icon: BusFront },
+  { label: "Airport cab Bangalore", icon: Car },
+];
 
-  return (
-    <>
-      <section className="hero" data-testid="hero">
-        <div className="hero-bg" style={{ backgroundImage: `url(${HERO_IMAGE})` }}/>
-        <div className="hero-inner">
-          <div className="hero-eyebrow"><Sparkles size={13}/> Intelligent travel concierge · 2026</div>
-          <h1 data-testid="hero-heading">Go somewhere<br/><em>worth remembering.</em></h1>
-          <p className="hero-copy">
-            One intelligent conversation for flights, stays, road journeys and the little details that make a trip feel like yours — in your language, at your pace.
-          </p>
-          <div className="hero-stats">
-            <div className="hero-stat"><strong>12k+</strong><span>Curated stays</span></div>
-            <div className="hero-stat"><strong>8 langs</strong><span>Voice assistant</span></div>
-            <div className="hero-stat"><strong>24/7</strong><span>AI concierge</span></div>
-          </div>
-        </div>
-      </section>
-
-      <div className="search-card">
-        <SearchBar/>
+const MessageBubble = ({ msg, onOpenCard }) => (
+  <div className={`chat-row ${msg.role}`} data-testid={`chat-row-${msg.role}`}>
+    <div className="chat-avatar-lg">
+      {msg.role === "assistant" ? <Sparkles size={16} /> : <span>You</span>}
+    </div>
+    <div className="chat-bubble-wrap">
+      <div className="chat-bubble-lg">
+        {msg.text || <span className="typing-dots"><i/><i/><i/></span>}
       </div>
-
-      <section className="section" data-testid="destinations-section">
-        <div className="section-head">
-          <div>
-            <div className="section-eyebrow">Trending now</div>
-            <h2>Where India is wandering this season</h2>
-          </div>
-          <p className="section-sub">Hand-picked destinations our concierge is planning the most this month.</p>
-        </div>
-        <div className="dest-grid">
-          {featured.destinations.map((d) => (
-            <div key={d.city} className="dest-card" onClick={() => openDest(d.city)} data-testid={`dest-card-${d.city.toLowerCase()}`}>
-              <img src={d.image} alt={d.city} loading="lazy"/>
-              <div className="dest-info">
-                <div className="dest-tag">{d.tag}</div>
-                <h3>{d.city}</h3>
-                <div className="dest-price">From <strong>₹{d.from_price.toLocaleString("en-IN")}</strong> · {d.country}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="section" data-testid="collections-section">
-        <div className="section-head">
-          <div>
-            <div className="section-eyebrow">Curated trips</div>
-            <h2>Journeys crafted by our concierge</h2>
-          </div>
-          <p className="section-sub">Signature itineraries from India and beyond — ready to personalise.</p>
-        </div>
-        <div className="collection-grid">
-          {featured.collections.map((c) => (
-            <div key={c.title} className="collection-card" onClick={() => openDest(c.title.split(" ")[0])} data-testid={`collection-${c.title.replace(/\s/g,'-').toLowerCase()}`}>
-              <img src={c.image} alt={c.title} loading="lazy"/>
-              <div className="collection-body">
-                <h3>{c.title}</h3>
-                <div style={{color:'var(--muted)',fontSize:12}}>{c.nights} nights · Fully guided</div>
-                <div className="collection-meta">
-                  <span>Starting from</span>
-                  <span className="collection-price">₹{c.price.toLocaleString("en-IN")}</span>
+      {msg.cards?.length > 0 && (
+        <div className="inline-cards">
+          {msg.cards.map(card => (
+            <article key={card.id} className="inline-card" onClick={() => onOpenCard(card)} data-testid={`inline-card-${card.id}`}>
+              <img src={card.image} alt={card.title}/>
+              <div className="inline-body">
+                <span className="inline-type">{card.type}</span>
+                <h4>{card.title}</h4>
+                <small>{card.brand}</small>
+                <div className="inline-footer">
+                  <strong>₹{Number(card.price).toLocaleString("en-IN")}</strong>
+                  <button className="inline-cta" data-testid={`inline-book-${card.id}`}>View <ArrowRight size={12}/></button>
                 </div>
               </div>
-            </div>
+            </article>
           ))}
         </div>
-      </section>
+      )}
+    </div>
+  </div>
+);
 
-      <section className="section" data-testid="why-section">
-        <div className="section-head">
+export default function Home() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [messages, setMessages] = useState([
+    { id: "greet", role: "assistant", text: "Namaste! Main DestinoWay — aapka travel agent. Flight, hotel, bus ya cab — kya chahiye bataiye? Aap koi bhi language me baat kar sakte ho." },
+  ]);
+  const [text, setText] = useState("");
+  const [listening, setListening] = useState(false);
+  const [speakingReply, setSpeakingReply] = useState(false);
+  const [voiceOutput, setVoiceOutput] = useState(true);
+  const [sending, setSending] = useState(false);
+  const recognition = useRef(null);
+  const endRef = useRef(null);
+  const voiceModeRef = useRef(false); // true for current send if invoked via mic
+  const historyRef = useRef([]); // mirrors conversation for backend
+
+  // keep history in sync with messages
+  useEffect(() => {
+    historyRef.current = messages
+      .filter((m) => m.text && m.id !== "greet")
+      .map((m) => ({ role: m.role, text: m.text }));
+  }, [messages]);
+
+  // warm up voices list on mount
+  useEffect(() => { window.speechSynthesis?.getVoices(); }, []);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  const openCard = (card) => {
+    http.post("/travel/cache", [card]).catch(() => {});
+    const service = card.type === "flight" ? "flights" : card.type === "hotel" ? "hotels" : card.type === "bus" ? "buses" : "cabs";
+    navigate(`/detail/${service}/${encodeURIComponent(card.id)}`);
+  };
+
+  const runSearch = async (intent, replyId) => {
+    try {
+      const { data } = await http.post("/travel/search", {
+        service: intent.service,
+        origin: intent.origin || "Delhi",
+        destination: intent.destination,
+        start_date: intent.start_date,
+        end_date: intent.end_date || intent.start_date,
+        travellers: Number(intent.travellers || 2),
+      });
+      await http.post("/travel/cache", data.results).catch(() => {});
+      const top3 = data.results.slice(0, 3);
+      setMessages((prev) => prev.map((m) => m.id === replyId ? { ...m, cards: top3 } : m));
+    } catch (e) {
+      setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: "assistant", text: "Search abhi fail ho gaya. Thodi der me try karein." }]);
+    }
+  };
+
+  const send = useCallback(async (preset, { fromVoice = false } = {}) => {
+    const t = (preset ?? text).trim();
+    if (!t || sending) return;
+    voiceModeRef.current = fromVoice;
+    setText("");
+    setSending(true);
+
+    const userId = `u-${Date.now()}`;
+    const replyId = `a-${Date.now() + 1}`;
+    const userMsg = { id: userId, role: "user", text: t };
+    const placeholder = { id: replyId, role: "assistant", text: "", streaming: true };
+    setMessages((old) => [...old, userMsg, placeholder]);
+
+    let answer = "";
+    try {
+      const resp = await fetch(`${API}/chat/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: t,
+          language: "auto",
+          history: historyRef.current.slice(-10),
+          context: { user: user?.name || null },
+        }),
+      });
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop();
+        for (const chunk of chunks) {
+          const line = chunk.split("\n").find((x) => x.startsWith("data: "));
+          if (!line) continue;
+          try {
+            const ev = JSON.parse(line.slice(6));
+            if (ev.text) {
+              answer += ev.text;
+              const { clean } = extractSearchIntent(answer);
+              setMessages((old) => old.map((m) => m.id === replyId ? { ...m, text: clean } : m));
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch {
+      answer = "Concierge se connect nahi ho pa raha. Thodi der me try karein.";
+      setMessages((old) => old.map((m) => m.id === replyId ? { ...m, text: answer } : m));
+    } finally {
+      setSending(false);
+    }
+
+    const { clean, intent } = extractSearchIntent(answer);
+    setMessages((old) => old.map((m) => m.id === replyId ? { ...m, text: clean } : m));
+
+    if (intent?.service && intent?.destination) {
+      await runSearch(intent, replyId);
+    }
+
+    if (voiceModeRef.current && voiceOutput && clean) {
+      setSpeakingReply(true);
+      speak(clean, { onEnd: () => setSpeakingReply(false) });
+    }
+    voiceModeRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, sending, user, voiceOutput]);
+
+  const toggleVoice = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Voice input not supported in this browser."); return; }
+    if (listening) { recognition.current?.stop(); setListening(false); return; }
+    const r = new SR();
+    r.lang = "en-IN"; // auto-detect at system; backend will handle actual language
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    r.onresult = (e) => {
+      const said = e.results[0][0].transcript;
+      setText(said);
+      send(said, { fromVoice: true });
+    };
+    r.onerror = () => setListening(false);
+    r.onend = () => setListening(false);
+    recognition.current = r;
+    r.start();
+    setListening(true);
+  };
+
+  const stopSpeaking = () => {
+    window.speechSynthesis?.cancel();
+    setSpeakingReply(false);
+  };
+
+  const showStarters = messages.length <= 1;
+
+  return (
+    <div className="agent-page" data-testid="agent-page">
+      <div className="agent-header">
+        <div className="agent-identity">
+          <div className="agent-avatar"><Sparkles size={20}/></div>
           <div>
-            <div className="section-eyebrow">Why DestinoWay</div>
-            <h2>A travel desk that actually understands you</h2>
+            <div className="agent-name">DestinoWay AI</div>
+            <div className="agent-status">
+              <span className="status-dot"/> Online · Hindi · English · Bengali · Tamil · Telugu
+            </div>
           </div>
         </div>
-        <div className="collection-grid">
-          <div className="collection-card" style={{padding:'32px 28px'}}>
-            <Globe2 size={28} style={{color:'var(--teal)'}}/>
-            <h3 style={{marginTop:14}}>Any language, any script</h3>
-            <p style={{color:'var(--muted)',fontSize:13,lineHeight:1.6}}>Chat or speak in Hindi, Hinglish, Bengali, Tamil, Telugu, Marathi — reply comes back in your language and your voice.</p>
-          </div>
-          <div className="collection-card" style={{padding:'32px 28px'}}>
-            <ShieldCheck size={28} style={{color:'var(--teal)'}}/>
-            <h3 style={{marginTop:14}}>Transparent pricing</h3>
-            <p style={{color:'var(--muted)',fontSize:13,lineHeight:1.6}}>Clear fare breakdown, no hidden fees. Razorpay-secured INR checkout, instant e-vouchers.</p>
-          </div>
-          <div className="collection-card" style={{padding:'32px 28px'}}>
-            <Headphones size={28} style={{color:'var(--teal)'}}/>
-            <h3 style={{marginTop:14}}>Human-level planning</h3>
-            <p style={{color:'var(--muted)',fontSize:13,lineHeight:1.6}}>Day-by-day itineraries, hotel + flight combos, and a saved trip board you can share with family.</p>
-          </div>
+        <div className="agent-actions">
+          <button
+            className={voiceOutput ? "icon-btn primary" : "icon-btn"}
+            title={voiceOutput ? "Voice reply on" : "Voice reply off"}
+            onClick={() => { setVoiceOutput(v => !v); if (voiceOutput) stopSpeaking(); }}
+            data-testid="toggle-voice-output"
+          >
+            {voiceOutput ? <Volume2 size={16}/> : <VolumeX size={16}/>}
+          </button>
+          {speakingReply && (
+            <button className="icon-btn" onClick={stopSpeaking} data-testid="stop-speaking">Stop</button>
+          )}
         </div>
-      </section>
+      </div>
 
-      <footer style={{textAlign:'center',padding:'60px 20px 40px',color:'var(--muted)',fontSize:12,borderTop:'1px solid var(--line)',marginTop:60}}>
-        © {new Date().getFullYear()} DestinoWay · Crafted with care in India
-      </footer>
-    </>
+      <div className="agent-messages" data-testid="agent-messages">
+        {messages.map((m) => (
+          <MessageBubble key={m.id} msg={m} onOpenCard={openCard}/>
+        ))}
+        <div ref={endRef}/>
+      </div>
+
+      {showStarters && (
+        <div className="agent-starters">
+          <div className="starter-label">Try saying</div>
+          <div className="starter-chips">
+            {QUICK_STARTERS.map((s, i) => {
+              const Icon = s.icon;
+              return (
+                <button key={i} onClick={() => send(s.label)} data-testid={`starter-${i}`}>
+                  <Icon size={13}/> {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <form
+        className="agent-compose"
+        onSubmit={(e) => { e.preventDefault(); send(undefined, { fromVoice: false }); }}
+      >
+        <button
+          type="button"
+          className={listening ? "icon-btn listening" : "icon-btn"}
+          onClick={toggleVoice}
+          aria-label="Voice input"
+          data-testid="voice-mic-btn"
+          title={listening ? "Stop listening" : "Talk — Hindi, English, Bengali and more"}
+        >
+          <Mic size={18}/>
+        </button>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={listening ? "Listening…" : "Message DestinoWay — koi bhi language me…"}
+          autoFocus
+          disabled={sending}
+          data-testid="agent-input"
+        />
+        <button type="submit" className="icon-btn primary" aria-label="Send" disabled={sending || !text.trim()} data-testid="agent-send">
+          <Send size={18}/>
+        </button>
+      </form>
+
+      <div className="agent-hint">
+        Tip: Mic se bologe to voice me jawab milega. Type karoge to sirf text — chup. {" "}
+        <button className="link-btn" onClick={() => navigate("/search")}>Classic search ⟶</button>
+      </div>
+    </div>
   );
 }
