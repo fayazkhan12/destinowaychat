@@ -1,0 +1,28 @@
+{
+  "name": "destinoway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Destinoway - AI-first Travel + Commerce platform",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "dev": "concurrently -n api,web -c teal,magenta \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "test": "npm run test -w backend",
+    "secrets": "node scripts/gen-secrets.mjs",
+    "test:integration": "npm run test:integration -w backend",
+    "lint": "npm run lint -w frontend",
+    "check": "npm run typecheck && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

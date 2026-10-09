@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info: { title: Destinoway API, version: 1.0.0, description: "AI-first Travel + Commerce platform. Cookie auth (HttpOnly). State-changing requests need header `X-Requested-With: destinoway` and an allowed Origin." }
+servers: [{ url: http://localhost:4000/api/v1 }]
+components:
+  securitySchemes: { cookieAuth: { type: apiKey, in: cookie, name: dw_at } }
+  schemas:
+    Error: { type: object, properties: { error: { type: object, properties: { code: { type: string }, message: { type: string }, requestId: { type: string } } } } }
+security: [{ cookieAuth: [] }]
+paths:
+  /auth/register: { post: { tags: [Authentication], security: [], summary: Register (always 202, never reveals if email exists), requestBody: { content: { application/json: { schema: { type: object, required: [name, email, password], properties: { name: { type: string }, email: { type: string }, password: { type: string, minLength: 10 } } } } } }, responses: { '202': { description: Accepted }, '400': { description: Validation } } } }
+  /auth/login: { post: { tags: [Authentication], security: [], summary: Login - sets dw_at (15m) and dw_rt (refresh) HttpOnly cookies, responses: { '200': { description: OK }, '401': { description: Invalid credentials or locked }, '429': { description: Rate limited } } } }
+  /auth/refresh: { post: { tags: [Authentication], security: [], summary: Rotate refresh token (reuse detection revokes the session), responses: { '200': { description: OK }, '401': { description: Expired } } } }
+  /auth/logout: { post: { tags: [Authentication], summary: Revoke current session, responses: { '204': { description: Done } } } }
+  /auth/logout-all: { post: { tags: [Authentication], summary: Revoke every session, responses: { '204': { description: Done } } } }
+  /auth/verify-email: { post: { tags: [Authentication], security: [], summary: Verify email with token, responses: { '200': { description: OK } } } }
+  /auth/forgot-password: { post: { tags: [Authentication], security: [], summary: Request reset link (always 202), responses: { '202': { description: Accepted } } } }
+  /auth/reset-password: { post: { tags: [Authentication], security: [], summary: Reset password (revokes all sessions), responses: { '200': { description: OK } } } }
+  /auth/google/start: { get: { tags: [Authentication], security: [], summary: Begin Google OAuth, responses: { '302': { description: Redirect } } } }
+  /me: { get: { tags: [Users], summary: Current user + permissions, responses: { '200': { description: OK } } } }
+  /sessions: { get: { tags: [Users], summary: List my active sessions, responses: { '200': { description: OK } } } }
+  /sessions/{sessionId}: { delete: { tags: [Users], summary: Revoke one of my sessions, parameters: [{ name: sessionId, in: path, required: true, schema: { type: string, format: uuid } }], responses: { '204': { description: Done } } } }
+  /preferences: { get: { tags: [Users], summary: Long-term memory, responses: { '200': { description: OK } } }, put: { tags: [Users], summary: Update memory settings, responses: { '200': { description: OK } } }, delete: { tags: [Users], summary: Forget all stored preferences, responses: { '204': { description: Done } } } }
+  /trips: { get: { tags: [Trips], summary: My trips, responses: { '200': { description: OK } } } }
+  /trips/{id}: { get: { tags: [Trips], summary: Trip state + recent messages (owner only), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { description: Not found } } } }
+  /chat/messages: { post: { tags: [AI], summary: Send a message (REST fallback; WebSocket `chat:send` streams progress), requestBody: { content: { application/json: { schema: { type: object, required: [text], properties: { tripId: { type: string }, text: { type: string, maxLength: 2000 } } } } } }, responses: { '200': { description: Reply + TripState } } } }
+  /admin/users: { get: { tags: [Admin], summary: List users (admin:users:read), responses: { '200': { description: OK }, '403': { description: Forbidden } } } }
+  /admin/audit-logs: { get: { tags: [Admin], summary: Immutable audit log (admin:audit:read), responses: { '200': { description: OK } } } }
+  /admin/users/{id}/role: { patch: { tags: [Admin], summary: Change role (SUPER_ADMIN only; revokes target sessions), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK } } } }
+  /admin/system: { get: { tags: [Admin], summary: Domains, agents, tools (metadata), provider health, responses: { '200': { description: OK } } } }
+x-planned: [Search Flights REST, Hotels, Bookings, Payments, Support - added with Phases 4-7]

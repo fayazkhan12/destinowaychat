@@ -1,0 +1,53 @@
+name: CI/CD
+on:
+  pull_request:
+  push: { branches: [main] }
+permissions: { contents: read }
+concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      mongo: { image: "mongo:7", ports: ["27017:27017"] }
+      redis: { image: "redis:7-alpine", ports: ["6379:6379"] }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint (frontend, ESLint 9 + Next rules)
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Integration tests (real MongoDB + Redis service containers)
+        run: npm run test:integration
+        env: { TEST_MONGO_URI: "mongodb://localhost:27017/destinoway_ci", TEST_REDIS_URL: "redis://localhost:6379/15" }
+      - name: Dependency audit (fails on high/critical)
+        run: npm audit --audit-level=high --omit=dev
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Build
+        run: npm run build
+        env: { NEXT_PUBLIC_API_URL: "http://localhost:4000" }
+      # TODO(Phase 7): k6 load tests, OWASP ZAP baseline scan against staging.
+
+  deploy-staging:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Build & push images, deploy to STAGING (uses the 'staging' environment's own secrets), then run smoke tests."
+      # Replace with your platform's deploy step (ECS/Cloud Run/Kubernetes/Render ...).
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production   # configure required reviewers on this environment = manual approval gate
+    steps:
+      - run: echo "Promote the SAME tested image to PRODUCTION (production-only secrets)."

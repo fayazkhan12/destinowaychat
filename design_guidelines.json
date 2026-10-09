@@ -1,0 +1,70 @@
+{
+  "app_name": "DestinoWay Intelligent Travel Agent",
+  "archetype": "LUXURY & PERFORMANCE HYBRID",
+  "typography": {
+    "heading_font": "Outfit, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight font-extrabold",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-bold",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "body": "text-base leading-relaxed"
+    }
+  },
+  "colors": {
+    "primary": "#0F172A",
+    "accent": "#0D9488",
+    "gold": "#D97706",
+    "surface": "#1E293B",
+    "background": "#090D16",
+    "card_bg": "#131C2E",
+    "border": "#334155",
+    "text_primary": "#F8FAFC",
+    "text_muted": "#94A3B8"
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-slate-900/70 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.37)]",
+    "tracing_beam": "relative rounded-xl p-[1px] overflow-hidden group bg-gradient-to-r from-teal-500/50 via-cyan-500/20 to-amber-500/50",
+    "glow": "shadow-[0_0_30px_rgba(13,148,136,0.2)]"
+  },
+  "components": [
+    "Navbar with live voice toggle and language switcher",
+    "Hero section with immersive destination search & AI conversational trigger",
+    "Multilingual Natural Language Voice & Text Travel Assistant (Speech-to-text, Text-to-speech, Multi-language AI)",
+    "Unified Search & Compare Engine (Flights, Hotels, Buses, Cabs) with Amadeus API toggle or Mock provider",
+    "Interactive Itinerary Builder & Day-by-Day Planner",
+    "Saved Trips & Shareable Itineraries with deep links & booking handoff modal"
+  ],
+  "grids": {
+    "marketing": "grid-cols-1 md:grid-cols-12 gap-8",
+    "dashboard": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6"
+  },
+  "motion": {
+    "default_transition": "transition-all duration-300 ease-in-out",
+    "hover_lift": "hover:-translate-y-1 hover:shadow-xl"
+  },
+  "accessibility": {
+    "min_contrast_ratio": "4.5:1 for normal text, 3:1 for large text",
+    "focus_states": "focus:ring-2 focus:ring-teal-400 focus:outline-none",
+    "aria_labels_mandatory": true
+  },
+  "image_urls": [
+    {
+      "category": "Hero Background / Luxury Resort",
+      "url": "https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?q=85&w=1920&auto=format&fit=crop",
+      "description": "Luxury resort pool overlooking serene blue sea"
+    },
+    {
+      "category": "Infinity Pool Sunset",
+      "url": "https://images.unsplash.com/photo-1561501900-3701fa6a0864?q=85&w=1200&auto=format&fit=crop",
+      "description": "Stunning sunset infinity pool at luxury hotel"
+    },
+    {
+      "category": "Tropical Palms Lounge",
+      "url": "https://images.unsplash.com/photo-1549294413-26f195200c16?q=85&w=1200&auto=format&fit=crop",
+      "description": "Lounge chairs surrounded by palm trees"
+    }
+  ],
+  "instructions_to_main_agent": "Ensure all interactive elements have data-testid attributes. Implement fully working multilingual voice assistant using browser SpeechRecognition and SpeechSynthesis API in any spoken language. Connect backend with Amadeus API credentials environment variables (AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET) with robust fallback mock travel engine for flights, hotels, buses, and cabs. Provide complete itinerary builder, sharing modal, and booking handoff deep links."
+}
