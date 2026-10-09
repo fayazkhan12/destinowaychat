@@ -1,0 +1,32 @@
+{
+  "summary": "V2 full E2E testing complete. Backend: 14/14 pytest tests pass (health, auth signup/login/me/duplicate/bad-password, travel search for all 4 services with mode=DEMO, cache+detail, featured destinations, trips save/get, bookings DEMO flow + demo-confirm + fetch, SSE chat with done event). Frontend: full happy path works — Home renders hero/destinations/collections/4 service tabs; Hotels search navigates to /search with 6 result cards; clicking a card opens /detail/:service/:id with Reserve now; Reserve now when unauth redirects to /login; after signup the Reserve now creates a booking, routes to /checkout/:id, filling traveller form and Pay (DEMO) confirms booking and routes to /booking/:id with 'Booking confirmed!'; Dashboard shows the booking; AI Concierge opens, Hindi message 'मुझे गोवा के लिए प्लान चाहिए' streams a full Devanagari reply via SSE. DEMO mode is explicit and expected (Razorpay + Akbar keys intentionally empty).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard bookings list", "issues": ["If user clicks 'Reserve now' twice (once pre-login, then again post-signup redirect), a 'PENDING PAYMENT' booking is left orphaned alongside the real CONFIRMED DEMO one. Consider deduping or deleting pending bookings when a new one is created for the same item within the session."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_destinoway.py",
+    "/app/backend/tests/test_travel_api.py",
+    "/app/test_reports/pytest/destinoway.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~630 lines — still fine but approaching the point where auth/travel/bookings/chat should be split into submodules.",
+    "/api/travel/detail/{item_id} relies entirely on the frontend posting results to /api/travel/cache first. If a user shares a /detail/:service/:id link in a fresh session, the detail endpoint will 404. Consider server-side caching of searches by (service, dest, dates) hash so detail links are reproducible.",
+    "/api/bookings/demo-confirm takes a booking_id with no auth check — any user who knows the id can confirm_demo someone else's pending booking. Low risk in DEMO but should require ownership check or at least match user when authenticated.",
+    "/api/trips POST accepts optional_user, so unauthenticated clients can create trips with user_id=None indefinitely (soft DoS). Consider rate-limiting or requiring auth.",
+    "chat_stream always inserts into db.chat_messages even on provider failure — fine, but language field stored as 'auto' when auto-detect is used; actual detected language is lost."
+  ],
+  "updated_files": ["/app/backend/tests/test_destinoway.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Dynamic signup emails used (ui_XXXX@destinoway.com / test1234). Seeded account test@destinoway.com / test1234 also present per /app/memory/test_credentials.md.",
+  "seed_data_creation": "Each test run creates a fresh test_<uuid>@destinoway.com user, several bookings, trips, and cached search items. No cleanup fixture — safe since prefixed/unique.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "V2 DestinoWay is production-grade and passing all requested feature tests. DEMO mode is correct until Akbar + Razorpay keys are provided. When Akbar creds land, re-test /api/travel/search?service=hotels for mode=LIVE and verify akbar_ref is present on items. When Razorpay keys land, verify /api/bookings returns razorpay_order_id and mode=LIVE, and that /api/bookings/verify validates signature. The frontend AIConcierge chat input used selector '[data-testid=chat-input]'; the first assistant 'message' element at index 0 is the greeting bubble, so when asserting replies index properly (user msgs and assistant msgs are interleaved as children of chat-messages).",
+  "rca of the issue": "N/A — no failing features."
+}
