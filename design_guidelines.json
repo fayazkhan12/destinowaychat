@@ -1,70 +1,162 @@
 {
-  "app_name": "DestinoWay Intelligent Travel Agent",
-  "archetype": "LUXURY & PERFORMANCE HYBRID",
+  "project_name": "DestinoWay - PanJourney Intelligence Travel Agent",
+  "version": "2.0.0",
+  "created_at": "July 2026",
+  "archetype": "LUXURY_EDITORIAL_SAAS",
+  "theme": {
+    "default_mode": "dark",
+    "supported_modes": ["dark", "light"],
+    "colors": {
+      "background_dark": "#070D14",
+      "surface_dark": "#0D1824",
+      "surface_dark_elevated": "#142232",
+      "border_dark": "rgba(226, 232, 240, 0.12)",
+      "primary_teal": "#2DD4BF",
+      "primary_hover": "#5EEAD4",
+      "gold_accent": "#F59E0B",
+      "text_primary": "#F8FAFC",
+      "text_muted": "#94A3B8",
+      "text_dark_contrast": "#0F172A",
+      "background_light": "#FAF9F6",
+      "surface_light": "#FFFFFF",
+      "border_light": "#E2E8F0"
+    }
+  },
   "typography": {
-    "heading_font": "Outfit, sans-serif",
-    "body_font": "Inter, sans-serif",
-    "mono_font": "JetBrains Mono, monospace",
+    "heading_font": "Playfair Display, serif",
+    "body_font": "Manrope, sans-serif",
+    "mono_font": "DM Mono, monospace",
+    "font_cdn_import": "@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600;1,700&display=swap');",
     "scale": {
-      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight font-extrabold",
-      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-bold",
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight",
       "h3": "text-xl sm:text-2xl font-semibold",
-      "body": "text-base leading-relaxed"
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "label": "font-mono text-xs uppercase tracking-widest text-teal-400"
     }
   },
-  "colors": {
-    "primary": "#0F172A",
-    "accent": "#0D9488",
-    "gold": "#D97706",
-    "surface": "#1E293B",
-    "background": "#090D16",
-    "card_bg": "#131C2E",
-    "border": "#334155",
-    "text_primary": "#F8FAFC",
-    "text_muted": "#94A3B8"
-  },
-  "visual_enhancers": {
-    "glassmorphism": "backdrop-blur-xl bg-slate-900/70 border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.37)]",
-    "tracing_beam": "relative rounded-xl p-[1px] overflow-hidden group bg-gradient-to-r from-teal-500/50 via-cyan-500/20 to-amber-500/50",
-    "glow": "shadow-[0_0_30px_rgba(13,148,136,0.2)]"
-  },
-  "components": [
-    "Navbar with live voice toggle and language switcher",
-    "Hero section with immersive destination search & AI conversational trigger",
-    "Multilingual Natural Language Voice & Text Travel Assistant (Speech-to-text, Text-to-speech, Multi-language AI)",
-    "Unified Search & Compare Engine (Flights, Hotels, Buses, Cabs) with Amadeus API toggle or Mock provider",
-    "Interactive Itinerary Builder & Day-by-Day Planner",
-    "Saved Trips & Shareable Itineraries with deep links & booking handoff modal"
-  ],
-  "grids": {
-    "marketing": "grid-cols-1 md:grid-cols-12 gap-8",
-    "dashboard": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6"
-  },
-  "motion": {
-    "default_transition": "transition-all duration-300 ease-in-out",
-    "hover_lift": "hover:-translate-y-1 hover:shadow-xl"
-  },
-  "accessibility": {
-    "min_contrast_ratio": "4.5:1 for normal text, 3:1 for large text",
-    "focus_states": "focus:ring-2 focus:ring-teal-400 focus:outline-none",
-    "aria_labels_mandatory": true
-  },
-  "image_urls": [
-    {
-      "category": "Hero Background / Luxury Resort",
-      "url": "https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?q=85&w=1920&auto=format&fit=crop",
-      "description": "Luxury resort pool overlooking serene blue sea"
-    },
-    {
-      "category": "Infinity Pool Sunset",
-      "url": "https://images.unsplash.com/photo-1561501900-3701fa6a0864?q=85&w=1200&auto=format&fit=crop",
-      "description": "Stunning sunset infinity pool at luxury hotel"
-    },
-    {
-      "category": "Tropical Palms Lounge",
-      "url": "https://images.unsplash.com/photo-1549294413-26f195200c16?q=85&w=1200&auto=format&fit=crop",
-      "description": "Lounge chairs surrounded by palm trees"
+  "layout_and_spacing": {
+    "spacing_philosophy": "Generous spacing (p-6, p-8, gap-6, gap-8) with clear contrast and non-colliding container paddings.",
+    "container_max_width": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "grid_modes": {
+      "search_and_hero": "MODE A: Hero search bar with multi-tab selector (Flights, Hotels, Buses, Cabs) elevated over high-resolution imagery.",
+      "results_and_sidebar": "MODE B: 2-column layout with responsive filter sidebar (left, col-span-3) and search result cards (right, col-span-9).",
+      "dashboard_bento": "MODE A: Bento layout for My Bookings, Pin-to-Trip itinerary board, and Multilingual Voice Concierge."
     }
+  },
+  "key_features_and_flows": [
+    "Unified Multi-Tab Hero Search (Flights, Hotels, Buses, Cabs)",
+    "PanJourney-inspired Curated Destinations & Stays Grid",
+    "Intelligence Multilingual AI Travel Concierge with Browser Native Voice Speech Synthesis & Microphone Input (Hindi, Bengali, Tamil, Telugu, English, Marathi, Gujarati, Kannada)",
+    "Akbar API Integration Bridge & Dynamic Live Data Mocking",
+    "Search Results Page with Comprehensive Filters (Price slider, Stops, Airline/Operator, Amenities, Departure Time)",
+    "Detail View & Booking Drawer with Gallery, Cabin/Room Options, Transparent Price Breakdown",
+    "Razorpay Payment Gateway Integration for Seamless INR Checkout",
+    "Google Sign-In & Email/Password Authentication Flow",
+    "User Dashboard: My Bookings, E-Voucher Viewer with QR Code & Print PDF option, Saved Trips Board"
   ],
-  "instructions_to_main_agent": "Ensure all interactive elements have data-testid attributes. Implement fully working multilingual voice assistant using browser SpeechRecognition and SpeechSynthesis API in any spoken language. Connect backend with Amadeus API credentials environment variables (AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET) with robust fallback mock travel engine for flights, hotels, buses, and cabs. Provide complete itinerary builder, sharing modal, and booking handoff deep links."
+  "image_urls": {
+    "hero_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=80",
+        "alt": "Tropical Paradise Resort Beach",
+        "category": "hero"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1600&q=80",
+        "alt": "Luxury Hotel Exterior Night",
+        "category": "hero"
+      }
+    ],
+    "top_hotels": [
+      {
+        "name": "The Taj Mahal Palace, Mumbai",
+        "url": "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
+        "rating": "4.9",
+        "price": "₹22,500/night",
+        "category": "hotels"
+      },
+      {
+        "name": "The Oberoi Udaivilas, Udaipur",
+        "url": "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80",
+        "rating": "5.0",
+        "price": "₹34,000/night",
+        "category": "hotels"
+      },
+      {
+        "name": "Umaid Bhawan Palace, Jodhpur",
+        "url": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80",
+        "rating": "4.9",
+        "price": "₹45,000/night",
+        "category": "hotels"
+      },
+      {
+        "name": "Soneva Fushi, Maldives",
+        "url": "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80",
+        "rating": "4.95",
+        "price": "₹68,000/night",
+        "category": "hotels"
+      }
+    ],
+    "popular_destinations": [
+      {
+        "city": "Goa, India",
+        "url": "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=800&q=80",
+        "tag": "Beach Vacations"
+      },
+      {
+        "city": "Udaipur, Rajasthan",
+        "url": "https://images.unsplash.com/photo-1615836245337-f5b9b2303f10?auto=format&fit=crop&w=800&q=80",
+        "tag": "Heritage & Luxury"
+      },
+      {
+        "city": "Malé, Maldives",
+        "url": "https://images.unsplash.com/photo-1514282401047-d79a71a590e8?auto=format&fit=crop&w=800&q=80",
+        "tag": "Island Paradise"
+      },
+      {
+        "city": "Dubai, UAE",
+        "url": "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=800&q=80",
+        "tag": "Skyline & Shopping"
+      },
+      {
+        "city": "Manali, Himachal",
+        "url": "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=800&q=80",
+        "tag": "Mountain Retreat"
+      }
+    ],
+    "partner_logos": [
+      {
+        "name": "Akbar Travels API",
+        "url": "https://img.icons8.com/color/96/airplane-mode-on.png"
+      },
+      {
+        "name": "Indigo Airlines",
+        "url": "https://img.icons8.com/color/96/airplane-take-off.png"
+      },
+      {
+        "name": "Air India",
+        "url": "https://img.icons8.com/color/96/flight-seats.png"
+      },
+      {
+        "name": "Razorpay",
+        "url": "https://img.icons8.com/color/96/verified-account.png"
+      }
+    ]
+  },
+  "component_guidelines": {
+    "file_extension": ".jsx",
+    "testing_attributes": "EVERY interactive element (buttons, inputs, selects, tabs, cards, modals, dropdowns) MUST include a unique descriptive data-testid attribute in kebab-case e.g. data-testid='flight-search-submit-btn', data-testid='hotel-filter-price-range'.",
+    "toast_notifications": "Use Sonner component at src/components/ui/sonner.jsx for booking status, voice assistance triggers, and login alerts.",
+    "accessibility_and_contrast": "Ensure min 4.5:1 text contrast ratio on dark and light surfaces. Never use pure transparent header backgrounds when scrolling."
+  },
+  "instructions_to_main_agent": [
+    "Ensure all 4 tabs (Flights, Hotels, Buses, Cabs) in the main search bar are fully interactive with rich destination autocomplete and real-time result filtering.",
+    "Provide a floating and expandable Multilingual AI Voice Assistant panel. Use browser native SpeechRecognition and SpeechSynthesis APIs for speaking & listening in Hindi, English, Bengali, Tamil, Telugu, Marathi, etc.",
+    "Include Akbar API backend/mock integration layer in FastAPI python service to simulate live flight, hotel, bus, and cab availability.",
+    "Implement Razorpay Checkout modal with test payment flow for INR transactions and booking voucher generation.",
+    "Ensure Google OAuth + Email Password login modals and session state are fully hooked up with data-testid on submit buttons.",
+    "Do not break existing React components in src/components/ui. Use .js and .jsx files for custom implementation."
+  ]
 }
