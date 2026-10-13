@@ -50,18 +50,14 @@ if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
     razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
-# fallback chain if primary model is overloaded / rate-limited (ordered: fast -> smaller)
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+# tight fallback chain: fastest lite models first so if primary is overloaded we switch in <1s
 _fb = [
     GEMINI_MODEL,
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-flash-lite-latest",
     "gemini-3.1-flash-lite",
+    "gemini-3.8-flash",
 ]
 GEMINI_FALLBACK_MODELS: List[str] = []
 for _m in _fb:
@@ -754,17 +750,34 @@ async def chat_stream(req: ChatRequest):
         contents.append(genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=ctx_prefix + req.message)]))
 
         last_exc = None
+        # trim history to last 6 to keep prompt small (speed)
+        contents_small = contents[-7:] if len(contents) > 7 else contents
         for model_name in GEMINI_FALLBACK_MODELS:
             try:
-                stream = await genai_client.aio.models.generate_content_stream(
-                    model=model_name,
-                    contents=contents,
-                    config=genai_types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT,
-                        temperature=0.7,
-                        max_output_tokens=512,
-                    ),
+                # Try with thinking disabled for max speed. Fall back to no thinking config if the model rejects it.
+                cfg_fast = genai_types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.6,
+                    max_output_tokens=220,
+                    thinking_config=genai_types.ThinkingConfig(thinking_level="low"),
+                    automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
                 )
+                try:
+                    stream = await genai_client.aio.models.generate_content_stream(
+                        model=model_name, contents=contents_small, config=cfg_fast,
+                    )
+                except Exception as cfg_exc:
+                    # model doesn't accept thinking_level — retry minimal config
+                    logger.info("Retrying %s without thinking_level: %s", model_name, cfg_exc)
+                    cfg_basic = genai_types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        temperature=0.6,
+                        max_output_tokens=220,
+                        automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
+                    )
+                    stream = await genai_client.aio.models.generate_content_stream(
+                        model=model_name, contents=contents_small, config=cfg_basic,
+                    )
                 async for chunk in stream:
                     text = getattr(chunk, "text", None)
                     if text:
@@ -773,10 +786,9 @@ async def chat_stream(req: ChatRequest):
                 break  # success — don't try fallback
             except Exception as exc:
                 last_exc = exc
-                logger.warning("Gemini %s unavailable: %s", model_name, exc)
-                # if we already streamed something, don't attempt a different model
+                logger.warning("Gemini %s unavailable: %s", model_name, str(exc)[:200])
                 if reply:
-                    break
+                    break  # already streamed something, don't start a different model
                 continue
         if not reply and last_exc is not None:
             reply = "Main abhi concierge se connect nahi ho pa raha. Thodi der me try karein."

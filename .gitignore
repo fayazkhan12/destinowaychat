@@ -87,3 +87,11 @@ android-sdk/
 **/.env
 .env
 **/.env
+.env
+*.env
+node_modules/
+__pycache__/
+*.pyc
+.ruff_cache/
+.emergent/
+venv/
