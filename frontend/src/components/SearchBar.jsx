@@ -20,12 +20,16 @@ export default function SearchBar({ initial = {}, onSubmit }) {
   const [service, setService] = useState(initial.service || "flights");
   const [origin, setOrigin] = useState(initial.origin || "New Delhi");
   const [destination, setDestination] = useState(initial.destination || "Goa");
+  const [destinationId, setDestinationId] = useState(initial.destination_id || "");
   const [startDate, setStartDate] = useState(initial.start_date || fmt(tmr));
   const [endDate, setEndDate] = useState(initial.end_date || fmt(nextWeek));
   const [travellers, setTravellers] = useState(initial.travellers || 2);
 
   const submit = () => {
-    const payload = { service, origin, destination, start_date: startDate, end_date: endDate, travellers };
+    const payload = {
+      service, origin, destination, start_date: startDate, end_date: endDate, travellers,
+      ...(destinationId ? { destination_id: destinationId } : {}),
+    };
     if (onSubmit) return onSubmit(payload);
     const q = new URLSearchParams(payload).toString();
     navigate(`/search?${q}`);
@@ -57,7 +61,7 @@ export default function SearchBar({ initial = {}, onSubmit }) {
         <div className="field">
           <div className="field-label"><MapPin size={11}/> {service === "hotels" ? "Destination" : "To"}</div>
           <div className="field-input">
-            <DestinationInput value={destination} onChange={setDestination} placeholder="Destination" testid="destination-input"/>
+            <DestinationInput value={destination} onChange={(v) => { setDestination(v); setDestinationId(""); }} onSelect={(r) => setDestinationId(r.supplierLocationId || r.id || "")} placeholder="Destination" testid="destination-input"/>
           </div>
         </div>
         <div className="field">

@@ -72,6 +72,15 @@ if GEMINI_API_KEY:
     genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 AKBAR_HOST = os.environ.get("AKBAR_API_HOST", "").rstrip("/")
+BENZY_SIG_URL = os.environ.get("AKBAR_SIGNATURE_URL", "").rstrip("/")
+BENZY_HOTEL_URL = os.environ.get("AKBAR_HOTEL_API_URL", "").rstrip("/")
+BENZY_MERCHANT_ID = os.environ.get("AKBAR_MERCHANT_ID", "")
+BENZY_API_KEY = os.environ.get("AKBAR_API_KEY", "")
+BENZY_CLIENT_ID = os.environ.get("AKBAR_CLIENT_ID", "")
+BENZY_PASSWORD = os.environ.get("AKBAR_PASSWORD", "")
+BENZY_BROWSER_KEY = os.environ.get("AKBAR_BROWSER_KEY", "")
+BENZY_KEY = os.environ.get("AKBAR_KEY", "")
+BENZY_AGENT_CODE = os.environ.get("AKBAR_AGENT_CODE", "")
 
 logger = logging.getLogger("destinoway")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -96,6 +105,7 @@ class SearchRequest(BaseModel):
     service: Literal["flights", "hotels", "buses", "cabs"]
     origin: str = "New Delhi"
     destination: str = "Goa"
+    destination_id: Optional[str] = None  # Akbar supplierLocationId when picked from autocomplete
     start_date: str = "2026-05-18"
     end_date: str = "2026-05-22"
     travellers: int = 2
@@ -298,49 +308,111 @@ async def destinations_autocomplete(q: str):
     return {"success": True, "mode": "LIVE" if (AKBAR_HOST and results) else "DEMO", "results": results}
 
 
-# ---------- Akbar/Travelportal adapter (plug & play) ----------
-async def _akbar_hotels(req: SearchRequest) -> Optional[List[Dict[str, Any]]]:
-    host = os.environ.get("AKBAR_API_HOST")
-    token = os.environ.get("AKBAR_API_TOKEN")
-    if not host or not token:
+# ---------- Akbar/Benzy hotel search (plug & play) ----------
+async def _benzy_signature(client_http: httpx.AsyncClient) -> Optional[str]:
+    """Fetch a short-lived signature/auth token from Benzy."""
+    if not (BENZY_SIG_URL and BENZY_MERCHANT_ID and BENZY_API_KEY and BENZY_CLIENT_ID and BENZY_PASSWORD):
         return None
     try:
-        payload = {
-            "locationId": req.destination,
-            "currency": "INR", "culture": "en-US",
-            "checkIn": req.start_date.replace("-", "/"), "checkOut": req.end_date.replace("-", "/"),
-            "rooms": [{"adults": str(req.travellers), "children": "0", "childAges": []}],
-            "agentCode": os.environ.get("AKBAR_AGENT_CODE", ""),
-            "nationality": req.nationality, "countryOfResidence": req.nationality,
-            "channelId": "b2bIndiaDeals", "affiliateRegion": "B2B_India",
-            "companyId": "1", "gstPercentage": 0, "tdsPercentage": 0,
-        }
+        r = await client_http.get(
+            BENZY_SIG_URL,
+            headers={
+                "merchantId": BENZY_MERCHANT_ID,
+                "apiKey": BENZY_API_KEY,
+                "clientId": BENZY_CLIENT_ID,
+                "password": BENZY_PASSWORD,
+                "browserKey": BENZY_BROWSER_KEY,
+            },
+            timeout=10,
+        )
+        if r.status_code != 200:
+            logger.warning("Benzy signature non-200: %s %s", r.status_code, r.text[:200])
+            return None
+        data = r.json()
+        return data.get("signature") or data.get("token") or data.get("Authorization") or data.get("data", {}).get("signature")
+    except Exception as exc:
+        logger.warning("Benzy signature fetch failed: %s", exc)
+        return None
+
+
+async def _akbar_hotels(req: SearchRequest) -> Optional[List[Dict[str, Any]]]:
+    """Live hotel search via Benzy Travelportal. Returns None if any step fails (caller falls back to mock)."""
+    if not (BENZY_HOTEL_URL and BENZY_MERCHANT_ID and BENZY_API_KEY):
+        return None
+    try:
         async with httpx.AsyncClient(timeout=20) as client_http:
-            init = await client_http.post(f"{host}/api/hotels/search/init", json=payload, headers={"Authorization": token})
+            signature = await _benzy_signature(client_http)
+            if not signature:
+                return None
+            location_id = req.destination_id or ""
+            if not location_id:
+                dests = await _akbar_destinations(req.destination)
+                if dests:
+                    location_id = dests[0].get("supplierLocationId") or dests[0].get("id") or ""
+            if not location_id:
+                return None
+            payload = {
+                "locationId": location_id,
+                "currency": "INR", "culture": "en-US",
+                "checkIn": req.start_date.replace("-", "/"),
+                "checkOut": req.end_date.replace("-", "/"),
+                "rooms": [{"adults": str(req.travellers), "children": "0", "childAges": []}],
+                "agentCode": BENZY_AGENT_CODE,
+                "nationality": req.nationality,
+                "countryOfResidence": req.nationality,
+                "channelId": "b2bIndiaDeals", "affiliateRegion": "B2B_India",
+                "companyId": "1", "gstPercentage": 0, "tdsPercentage": 0,
+            }
+            auth_headers = {
+                "Authorization": signature,
+                "merchantId": BENZY_MERCHANT_ID,
+                "apiKey": BENZY_API_KEY,
+                "clientId": BENZY_CLIENT_ID,
+                "browserKey": BENZY_BROWSER_KEY,
+                "Content-Type": "application/json",
+            }
+            init = await client_http.post(f"{BENZY_HOTEL_URL}/api/hotels/search/init", json=payload, headers=auth_headers)
             if init.status_code != 200:
-                logger.warning("Akbar init non-200: %s", init.status_code)
+                logger.warning("Benzy init non-200: %s %s", init.status_code, init.text[:200])
                 return None
             data = init.json()
-            search_id = data.get("searchId")
-            tracing = data.get("searchTracingKey")
-            session_key = os.environ.get("AKBAR_SESSION_KEY", "")
-            results = await client_http.get(
-                f"{host}/api/hotels/search/result/{search_id}/content?limit=25&offset=-1&filterdata=false&Authorization={token}",
-                headers={"user-session-key": session_key, "Authorization": token, "search-tracing-key": tracing},
-            )
-            hotels_raw = results.json().get("hotels", [])
+            search_id = data.get("searchId") or data.get("data", {}).get("searchId")
+            tracing = data.get("searchTracingKey") or data.get("data", {}).get("searchTracingKey")
+            if not search_id:
+                return None
+            result_headers = {**auth_headers, "search-tracing-key": tracing or "", "user-session-key": BENZY_KEY}
+            # Poll result up to 2 times (results are async)
+            hotels_raw = []
+            for _ in range(2):
+                results = await client_http.get(
+                    f"{BENZY_HOTEL_URL}/api/hotels/search/result/{search_id}/content?limit=25&offset=-1&filterdata=false",
+                    headers=result_headers,
+                )
+                if results.status_code == 200:
+                    body = results.json()
+                    hotels_raw = body.get("hotels") or body.get("data", {}).get("hotels") or []
+                    if hotels_raw:
+                        break
+                await asyncio.sleep(1.5)
+            if not hotels_raw:
+                return None
             return [{
-                "id": f"ak-{h.get('id')}", "type": "hotel", "provider": "Akbar Travelportal", "mode": "LIVE",
-                "title": h.get("name", "Hotel"), "brand": f"{req.destination} · {h.get('rating', 4)} star",
+                "id": f"ak-{h.get('id') or h.get('hotelId')}",
+                "type": "hotel", "provider": "Akbar / Benzy Travelportal", "mode": "LIVE",
+                "title": h.get("name", "Hotel"),
+                "brand": f"{req.destination} · {h.get('rating', h.get('starRating', 4))} star",
                 "origin": req.destination, "destination": req.destination,
-                "rating": float(h.get("rating", 4.3)), "location": h.get("address", ""),
-                "price": float(h.get("minPrice", 5000)), "currency": "INR",
-                "image": (h.get("images") or [{"url": _hotel_image(1, 0)}])[0].get("url", _hotel_image(1, 0)),
-                "amenities": h.get("amenities", [])[:5], "meta": ["Live inventory", "Breakfast included"],
-                "akbar_ref": {"searchId": search_id, "hotelId": h.get("id"), "tracingKey": tracing},
+                "rating": float(h.get("rating", h.get("starRating", 4.3)) or 4.3),
+                "location": h.get("address", h.get("location", "")),
+                "price": float(h.get("minPrice", h.get("totalPrice", h.get("price", 5000)))),
+                "currency": "INR",
+                "image": (h.get("images") or [{"url": _hotel_image(1, 0)}])[0].get("url", _hotel_image(1, 0)) if h.get("images") else _hotel_image(1, 0),
+                "amenities": (h.get("amenities") or h.get("facilities") or [])[:5],
+                "meta": ["Live inventory", "Instant confirmation"],
+                "akbar_ref": {"searchId": search_id, "hotelId": h.get("id") or h.get("hotelId"), "tracingKey": tracing},
             } for h in hotels_raw[:12]]
     except Exception as exc:
-        logger.warning("Akbar adapter error: %s", exc)
+        logger.warning("Benzy hotels adapter error: %s", exc)
         return None
 
 
