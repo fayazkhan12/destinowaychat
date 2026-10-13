@@ -301,9 +301,8 @@ export default function Home() {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={listening ? "Listening…" : "Message DestinoWay — koi bhi language me…"}
+          placeholder={listening ? "Listening…" : sending ? "AI typing… ya nayi baat type karein" : "Message DestinoWay — koi bhi language me…"}
           autoFocus
-          disabled={sending}
           data-testid="agent-input"
         />
         <button type="submit" className="icon-btn primary" aria-label="Send" disabled={sending || !text.trim()} data-testid="agent-send">

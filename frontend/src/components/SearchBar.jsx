@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plane, Hotel, BusFront, Car, MapPin, CalendarDays, Users, Search } from "lucide-react";
+import DestinationInput from "./DestinationInput";
 
 const SERVICES = [
   { id: "flights", label: "Flights", icon: Plane },
@@ -50,13 +51,13 @@ export default function SearchBar({ initial = {}, onSubmit }) {
         <div className="field">
           <div className="field-label"><MapPin size={11}/> {service === "hotels" ? "City" : "From"}</div>
           <div className="field-input">
-            <input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="Origin" data-testid="origin-input"/>
+            <DestinationInput value={origin} onChange={setOrigin} placeholder="Origin" testid="origin-input"/>
           </div>
         </div>
         <div className="field">
           <div className="field-label"><MapPin size={11}/> {service === "hotels" ? "Destination" : "To"}</div>
           <div className="field-input">
-            <input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="Destination" data-testid="destination-input"/>
+            <DestinationInput value={destination} onChange={setDestination} placeholder="Destination" testid="destination-input"/>
           </div>
         </div>
         <div className="field">

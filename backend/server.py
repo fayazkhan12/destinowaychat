@@ -7,6 +7,7 @@ multilingual Gemini-powered concierge SSE chat.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -22,7 +23,8 @@ import httpx
 import jwt
 import razorpay
 from dotenv import load_dotenv
-from emergentintegrations.llm.chat import LlmChat, StreamDone, TextDelta, UserMessage
+from google import genai
+from google.genai import types as genai_types
 from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -46,6 +48,30 @@ RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 razorpay_client: Optional[razorpay.Client] = None
 if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
     razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+# fallback chain if primary model is overloaded / rate-limited (ordered: fast -> smaller)
+_fb = [
+    GEMINI_MODEL,
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.1-flash-lite",
+]
+GEMINI_FALLBACK_MODELS: List[str] = []
+for _m in _fb:
+    if _m and _m not in GEMINI_FALLBACK_MODELS:
+        GEMINI_FALLBACK_MODELS.append(_m)
+genai_client: Optional[genai.Client] = None
+if GEMINI_API_KEY:
+    genai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+AKBAR_HOST = os.environ.get("AKBAR_API_HOST", "").rstrip("/")
 
 logger = logging.getLogger("destinoway")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -232,6 +258,44 @@ def _mock_results(req: SearchRequest) -> List[Dict[str, Any]]:
         "image": "https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=900&q=80",
         "meta": ["Toll included", "Free wait 45 min", "Child seat on request"],
     } for i in range(5)]
+
+
+# ---------- Akbar destination autocomplete ----------
+async def _akbar_destinations(search: str) -> List[Dict[str, Any]]:
+    if not AKBAR_HOST or not search.strip():
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=10) as client_http:
+            r = await client_http.post(
+                f"{AKBAR_HOST}/api/v1/destination/search",
+                json={"searchInput": search},
+                headers={"Content-Type": "application/json"},
+            )
+            if r.status_code != 200:
+                return []
+            payload = r.json()
+            items = payload.get("data", []) if payload.get("success") else []
+            return [{
+                "id": d.get("id"),
+                "label": d.get("displayName"),
+                "type": d.get("type"),
+                "city": d.get("city"),
+                "state": d.get("state"),
+                "country": d.get("country"),
+                "code": d.get("code"),
+                "coordinates": d.get("coordinates"),
+                "supplier": (d.get("supplierData") or {}).get("supplier"),
+                "supplierLocationId": (d.get("supplierData") or {}).get("supplierLocationId"),
+            } for d in items[:12]]
+    except Exception as exc:
+        logger.warning("Akbar destination search failed: %s", exc)
+        return []
+
+
+@api.get("/destinations/autocomplete")
+async def destinations_autocomplete(q: str):
+    results = await _akbar_destinations(q)
+    return {"success": True, "mode": "LIVE" if (AKBAR_HOST and results) else "DEMO", "results": results}
 
 
 # ---------- Akbar/Travelportal adapter (plug & play) ----------
@@ -574,64 +638,81 @@ async def payments_webhook(request: Request):
     return {"ok": True}
 
 
-# ---------- chat (multilingual) ----------
+# ---------- chat (multilingual, direct Google Gemini) ----------
+SYSTEM_PROMPT = (
+    "You are DestinoWay — a warm, concise multilingual Indian travel agent who speaks like a real human friend on a phone call. You are a CHAT AGENT, not a brochure.\n\n"
+    "LANGUAGE: Auto-detect user's language (Hindi, Hinglish, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, English, Urdu, Arabic etc.) and ALWAYS reply in the SAME language and script. Hinglish user = Hinglish reply.\n\n"
+    "STYLE RULES — STRICT:\n"
+    "1. Every reply MAX 2 short sentences. Voice-friendly, conversational. No markdown, no bullet lists, no emojis dump, no ** bold **.\n"
+    "2. Ask ONLY ONE question at a time. Flow: pick service (flight/hotel/bus/cab) → destination → origin → dates → travellers → confirm. Never jump ahead.\n"
+    "3. Talk like a human friend — contractions, light interjections (waah, bilkul, nice, got it, haan ji). Never sound robotic or like a travel brochure.\n"
+    "4. Do NOT dump prices, itineraries, or options unprompted. Wait for the user to be ready, then keep it tight.\n"
+    "5. Never claim a booking is confirmed without a payment reference.\n\n"
+    "SEARCH TRIGGER — IMPORTANT:\n"
+    "Once you have ALL FIVE pieces (service, destination, origin, start_date, end_date, travellers), END your reply with EXACTLY this JSON block on a new line and NOTHING after it:\n"
+    "<search>{\"service\":\"flights|hotels|buses|cabs\",\"origin\":\"City\",\"destination\":\"City\",\"start_date\":\"YYYY-MM-DD\",\"end_date\":\"YYYY-MM-DD\",\"travellers\":2}</search>\n"
+    "Before the block, write ONE short line like 'Perfect, abhi options dikhata hoon.' or 'Great, let me pull up some options.' The UI will render live cards from the block.\n"
+    "Do NOT emit the block until you have all five pieces. For cabs, end_date can equal start_date.\n\n"
+    "Example GOOD when user says 'Jaipur jaana hai': 'Jaipur — Pink City! Pehle ek baat batao, aap kahaan se chalenge?' (one short line, one question).\n"
+    "Example BAD: Dumping flight prices, hotel lists, itinerary, and 4 questions at once."
+)
+
+
 @api.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
-    key = os.environ.get("EMERGENT_LLM_KEY")
-
     async def generator():
         reply = ""
-        try:
-            chat = LlmChat(
-                api_key=key,
-                session_id=f"destinoway-{uuid.uuid4()}",
-                system_message=(
-                    "You are DestinoWay — a warm, concise multilingual Indian travel agent who speaks like a real human friend on a phone call. You are a CHAT AGENT, not a brochure.\n\n"
-                    "LANGUAGE: Auto-detect user's language (Hindi, Hinglish, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, English, Urdu, Arabic etc.) and ALWAYS reply in the SAME language and script. Hinglish user = Hinglish reply.\n\n"
-                    "STYLE RULES — STRICT:\n"
-                    "1. Every reply MAX 2 short sentences. Voice-friendly, conversational. No markdown, no bullet lists, no emojis dump, no ** bold **.\n"
-                    "2. Ask ONLY ONE question at a time. Flow: pick service (flight/hotel/bus/cab) → destination → origin → dates → travellers → confirm. Never jump ahead.\n"
-                    "3. Talk like a human friend — contractions, light interjections (waah, bilkul, nice, got it, haan ji). Never sound robotic or like a travel brochure.\n"
-                    "4. Do NOT dump prices, itineraries, or options unprompted. Wait for the user to be ready, then keep it tight.\n"
-                    "5. Never claim a booking is confirmed without a payment reference.\n\n"
-                    "SEARCH TRIGGER — IMPORTANT:\n"
-                    "Once you have ALL FIVE pieces (service, destination, origin, start_date, end_date, travellers), END your reply with EXACTLY this JSON block on a new line and NOTHING after it:\n"
-                    "<search>{\"service\":\"flights|hotels|buses|cabs\",\"origin\":\"City\",\"destination\":\"City\",\"start_date\":\"YYYY-MM-DD\",\"end_date\":\"YYYY-MM-DD\",\"travellers\":2}</search>\n"
-                    "Before the block, write ONE short line like 'Perfect, abhi options dikhata hoon.' or 'Great, let me pull up some options.' The UI will render live cards from the block.\n"
-                    "Do NOT emit the block until you have all five pieces. For cabs, end_date can equal start_date.\n\n"
-                    "Example GOOD when user says 'Jaipur jaana hai': 'Jaipur — Pink City! Pehle ek baat batao, aap kahaan se chalenge?' (one short line, one question).\n"
-                    "Example BAD: Dumping flight prices, hotel lists, itinerary, and 4 questions at once."
-                ),
-            ).with_model("gemini", "gemini-3.1-pro-preview")
-            hist_lines = []
-            for h in (req.history or [])[-10:]:
-                role = h.get("role", "user")
-                txt = (h.get("text") or "").strip()
-                if not txt:
-                    continue
-                tag = "User" if role == "user" else "Agent"
-                hist_lines.append(f"{tag}: {txt}")
-            history_block = "\n".join(hist_lines)
-            prompt = (
-                f"Travel context: {json.dumps(req.context, ensure_ascii=False)}\n"
-                f"Conversation so far:\n{history_block}\n\n"
-                f"User: {req.message}"
-            )
-            async for event in chat.stream_message(UserMessage(text=prompt)):
-                if isinstance(event, TextDelta):
-                    reply += event.content
-                    yield f"data: {json.dumps({'type': 'token', 'text': event.content}, ensure_ascii=False)}\n\n"
-                elif isinstance(event, StreamDone):
-                    break
-        except Exception as exc:
-            logger.warning("AI chat unavailable: %s", exc)
-            reply = (
-                "Main abhi concierge se connect nahi ho pa raha. Thodi der me try karein, ya search bar se "
-                "destination, dates aur budget bata kar options dekh lein."
-            )
+        if not genai_client:
+            reply = "AI concierge key configured nahi hai. Admin se kaho GEMINI_API_KEY /app/backend/.env me daal de."
             yield f"data: {json.dumps({'type': 'token', 'text': reply}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+            return
+
+        # Build Gemini contents from conversation history + current message
+        contents = []
+        for h in (req.history or [])[-10:]:
+            text = (h.get("text") or "").strip()
+            if not text:
+                continue
+            role = "user" if h.get("role") == "user" else "model"
+            contents.append(genai_types.Content(role=role, parts=[genai_types.Part.from_text(text=text)]))
+        ctx_prefix = ""
+        if req.context:
+            ctx_prefix = f"[Travel context: {json.dumps(req.context, ensure_ascii=False)}]\n"
+        contents.append(genai_types.Content(role="user", parts=[genai_types.Part.from_text(text=ctx_prefix + req.message)]))
+
+        last_exc = None
+        for model_name in GEMINI_FALLBACK_MODELS:
+            try:
+                stream = await genai_client.aio.models.generate_content_stream(
+                    model=model_name,
+                    contents=contents,
+                    config=genai_types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        temperature=0.7,
+                        max_output_tokens=512,
+                    ),
+                )
+                async for chunk in stream:
+                    text = getattr(chunk, "text", None)
+                    if text:
+                        reply += text
+                        yield f"data: {json.dumps({'type': 'token', 'text': text}, ensure_ascii=False)}\n\n"
+                break  # success — don't try fallback
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("Gemini %s unavailable: %s", model_name, exc)
+                # if we already streamed something, don't attempt a different model
+                if reply:
+                    break
+                continue
+        if not reply and last_exc is not None:
+            reply = "Main abhi concierge se connect nahi ho pa raha. Thodi der me try karein."
+            yield f"data: {json.dumps({'type': 'token', 'text': reply}, ensure_ascii=False)}\n\n"
+
         await db.chat_messages.insert_one({
             "message": req.message, "reply": reply, "language": req.language,
+            "model": GEMINI_MODEL,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
